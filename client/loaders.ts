@@ -28,12 +28,28 @@ import {
   webImageRpc,
   webSearchRpc,
   webTileRpc,
+  widgetAudioRpc,
+  widgetDataRpc,
+  widgetImageRpc,
   type FoundImage,
   type Located,
 } from "../shared/rpc";
 import type { ImageUrl, TextFile } from "./runtime";
 
-export type FileScope = { readonly agentId: string } | "gallery";
+/**
+ * Where a UI's files come from: an agent's workspace, a widget file's folder, or the gallery.
+ * A widget's `generation` goes up when it refreshes, so its loads are fetched again.
+ */
+export type FileScope =
+  | { readonly agentId: string }
+  | { readonly widget: string; readonly generation: number }
+  | "gallery";
+
+export function scopeKeyOf(scope: FileScope): string {
+  if (scope === "gallery") return "gallery";
+  if ("widget" in scope) return `widget:${scope.widget}:${scope.generation}`;
+  return scope.agentId;
+}
 
 type LoadedMedia = { ok: true; dataUrl: string } | { ok: false; error: string; off?: boolean };
 
@@ -64,31 +80,56 @@ export function useLoaders(scope: FileScope): Loaders {
   const galleryImage = useRpc(galleryImageRpc);
   const galleryAudio = useRpc(galleryAudioRpc);
   const webImage = useRpc(webImageRpc);
+  const widgetData = useRpc(widgetDataRpc);
+  const widgetImage = useRpc(widgetImageRpc);
+  const widgetAudio = useRpc(widgetAudioRpc);
 
-  const agentId = scope === "gallery" ? null : scope.agentId;
+  const agentId = scope !== "gallery" && "agentId" in scope ? scope.agentId : null;
+  const widget = scope !== "gallery" && "widget" in scope ? scope.widget : null;
 
   return useMemo(() => {
-    const fileImage: Loaders["image"] =
-      agentId === null
-        ? (path) => galleryImage({ path })
-        : (path) => loadImage({ agentId, path });
+    const files: Omit<Loaders, "image"> & { image: Loaders["image"] } =
+      widget !== null
+        ? {
+            data: (path, raw) => widgetData({ widget, path, raw }),
+            image: (path) => widgetImage({ widget, path }),
+            audio: (path) => widgetAudio({ widget, path }),
+          }
+        : agentId !== null
+          ? {
+              data: (path, raw) => loadData({ agentId, path, raw }),
+              image: (path) => loadImage({ agentId, path }),
+              audio: (path) => loadAudio({ agentId, path }),
+            }
+          : {
+              data: (path, raw) => galleryData({ path, raw }),
+              image: (path) => galleryImage({ path }),
+              audio: (path) => galleryAudio({ path }),
+            };
     return {
-      data:
-        agentId === null
-          ? (path, raw) => galleryData({ path, raw })
-          : (path, raw) => loadData({ agentId, path, raw }),
-      image: (src) => (/^https?:\/\//i.test(src) ? webImage({ url: src }) : fileImage(src)),
-      audio:
-        agentId === null
-          ? (path) => galleryAudio({ path })
-          : (path) => loadAudio({ agentId, path }),
+      data: files.data,
+      image: (src) => (/^https?:\/\//i.test(src) ? webImage({ url: src }) : files.image(src)),
+      audio: files.audio,
     };
-  }, [agentId, galleryAudio, galleryData, galleryImage, loadAudio, loadData, loadImage, webImage]);
+  }, [
+    agentId,
+    widget,
+    galleryAudio,
+    galleryData,
+    galleryImage,
+    loadAudio,
+    loadData,
+    loadImage,
+    webImage,
+    widgetAudio,
+    widgetData,
+    widgetImage,
+  ]);
 }
 
 export function useLoadedData(scope: FileScope, program: Program | null): ReadonlyMap<string, LoadedData> {
   const loaders = useLoaders(scope);
-  const scopeKey = scope === "gallery" ? "gallery" : scope.agentId;
+  const scopeKey = scopeKeyOf(scope);
   const requestsKey = useMemo(
     () => (program === null ? "[]" : JSON.stringify(collectLoads(program))),
     [program],
@@ -102,19 +143,28 @@ export function useLoadedData(scope: FileScope, program: Program | null): Readon
     return found;
   });
 
+  // Keys loaded for the current scope. A new scope (a widget's refresh) loads everything again,
+  // while the previous values stay on screen until the new ones arrive.
+  const fresh = useRef({ scopeKey, keys: new Set<string>(data.keys()) });
+  if (fresh.current.scopeKey !== scopeKey) fresh.current = { scopeKey, keys: new Set() };
+
   useEffect(() => {
     const requests = JSON.parse(requestsKey) as DataRequest[];
-    const missing = requests.filter((request) => !data.has(dataKey(request)));
+    const missing = requests.filter((request) => !fresh.current.keys.has(dataKey(request)));
     if (missing.length === 0) return;
+    for (const request of missing) fresh.current.keys.add(dataKey(request));
+    const settled = new Set<string>();
     let live = true;
     for (const request of missing) {
       const key = dataKey(request);
       loaders.data(request.path, request.raw).then(
         (loaded) => {
+          settled.add(key);
           rememberLoaded(`${scopeKey}|${key}`, loaded);
           if (live) setData((previous) => new Map(previous).set(key, loaded));
         },
         (cause: unknown) => {
+          settled.add(key);
           const error = cause instanceof Error ? cause.message : String(cause);
           if (live) setData((previous) => new Map(previous).set(key, { ok: false, error }));
         },
@@ -122,6 +172,10 @@ export function useLoadedData(scope: FileScope, program: Program | null): Readon
     }
     return () => {
       live = false;
+      // Requests cut short are asked for again by the next run of this effect.
+      for (const request of missing) {
+        if (!settled.has(dataKey(request))) fresh.current.keys.delete(dataKey(request));
+      }
     };
   }, [loaders, requestsKey, scopeKey]);
 
@@ -131,9 +185,11 @@ export function useLoadedData(scope: FileScope, program: Program | null): Readon
 export function useImageLoader(scope: FileScope): (src: string) => Promise<ImageUrl> {
   const loaders = useLoaders(scope);
   const images = useRef(new Map<string, Promise<ImageUrl>>());
+  const scopeKey = scopeKeyOf(scope);
   return useCallback(
     (src: string) => {
-      const cached = images.current.get(src);
+      const key = `${scopeKey}|${src}`;
+      const cached = images.current.get(key);
       if (cached !== undefined) return cached;
       const pending = loaders.image(src).then(
         (loaded): ImageUrl => (loaded.ok ? { ok: true, url: loaded.dataUrl } : loaded),
@@ -142,22 +198,24 @@ export function useImageLoader(scope: FileScope): (src: string) => Promise<Image
           error: cause instanceof Error ? cause.message : String(cause),
         }),
       );
-      images.current.set(src, pending);
+      images.current.set(key, pending);
       void pending.then((image) => {
-        if (!image.ok) images.current.delete(src);
+        if (!image.ok) images.current.delete(key);
       });
       return pending;
     },
-    [loaders],
+    [loaders, scopeKey],
   );
 }
 
 export function useAudioLoader(scope: FileScope): (src: string) => Promise<ImageUrl> {
   const loaders = useLoaders(scope);
   const audios = useRef(new Map<string, Promise<ImageUrl>>());
+  const scopeKey = scopeKeyOf(scope);
   return useCallback(
     (src: string) => {
-      const cached = audios.current.get(src);
+      const key = `${scopeKey}|${src}`;
+      const cached = audios.current.get(key);
       if (cached !== undefined) return cached;
       const pending = loaders.audio(src).then(
         (loaded): ImageUrl => (loaded.ok ? { ok: true, url: loaded.dataUrl } : loaded),
@@ -166,19 +224,19 @@ export function useAudioLoader(scope: FileScope): (src: string) => Promise<Image
           error: cause instanceof Error ? cause.message : String(cause),
         }),
       );
-      audios.current.set(src, pending);
+      audios.current.set(key, pending);
       void pending.then((audio) => {
-        if (!audio.ok) audios.current.delete(src);
+        if (!audio.ok) audios.current.delete(key);
       });
       return pending;
     },
-    [loaders],
+    [loaders, scopeKey],
   );
 }
 
 export function useTextLoader(scope: FileScope): (path: string) => Promise<TextFile> {
   const loaders = useLoaders(scope);
-  const scopeKey = scope === "gallery" ? "gallery" : scope.agentId;
+  const scopeKey = scopeKeyOf(scope);
   return useCallback(
     async (path: string): Promise<TextFile> => {
       const key = `${scopeKey}|${dataKey({ path, raw: true })}`;

@@ -27,6 +27,10 @@ import {
   webImageRpc,
   webSearchRpc,
   webTileRpc,
+  widgetAudioRpc,
+  widgetDataRpc,
+  widgetImageRpc,
+  widgetRefreshRpc,
 } from "./shared/rpc";
 import { GENUI_BLOCK_KIND } from "./shared/segment";
 import { genuiSettings, parseFolders } from "./shared/settings";
@@ -43,6 +47,9 @@ import {
   readGallerySpec,
   setExtraLoadFolders,
   sketchFontDataUrl,
+  loadRootedAudio,
+  loadRootedFile,
+  loadRootedImage,
 } from "./server/data-source";
 import {
   createProjectReader,
@@ -55,6 +62,7 @@ import {
   readProjectThreads,
 } from "./server/project";
 import { renderUiTool } from "./server/render-tool";
+import { refreshWidget, resolveWidget } from "./server/widgets";
 import { createWebLookups } from "./server/web/lookups";
 
 const DEFAULT_DEMO_SPEC = `$seats = 10
@@ -70,15 +78,19 @@ export default function contribute(server: PluginServerContext) {
   const settings = server.registerSettings(genuiSettings);
   let webLookupsEnabled = true;
 
+  let widgetFolders: string[] = [];
+
   void settings.read().then((state) => {
     if (state.status !== "ready") return;
     webLookupsEnabled = state.values.webLookups;
     setExtraLoadFolders(parseFolders(state.values.extraFolders));
+    widgetFolders = parseFolders(state.values.widgetFolders);
   });
   const unsubscribeSettings = settings.subscribe((state) => {
     if (state.status !== "ready") return;
     webLookupsEnabled = state.values.webLookups;
     setExtraLoadFolders(parseFolders(state.values.extraFolders));
+    widgetFolders = parseFolders(state.values.widgetFolders);
   });
 
   const web = createWebLookups(
@@ -188,6 +200,24 @@ export default function contribute(server: PluginServerContext) {
   server.handle(galleryDataRpc, ({ path, raw }) => loadGalleryFile(path, { raw }));
   server.handle(galleryImageRpc, ({ path }) => loadGalleryImage(path));
   server.handle(galleryAudioRpc, ({ path }) => loadGalleryAudio(path));
+
+  const inWidget = async <T>(
+    widget: string,
+    load: (dir: string) => Promise<T>,
+  ): Promise<T | { ok: false; error: string }> => {
+    const resolved = await resolveWidget(widget);
+    return resolved.ok ? load(resolved.dir) : { ok: false, error: resolved.error };
+  };
+  server.handle(widgetDataRpc, ({ widget, path, raw }) =>
+    inWidget(widget, (dir) => loadRootedFile(dir, path, { raw: raw ?? false })),
+  );
+  server.handle(widgetImageRpc, ({ widget, path }) => inWidget(widget, (dir) => loadRootedImage(dir, path)));
+  server.handle(widgetAudioRpc, ({ widget, path }) => inWidget(widget, (dir) => loadRootedAudio(dir, path)));
+  server.handle(widgetRefreshRpc, async ({ widget, force }) => {
+    const current = await settings.read();
+    const trusted = current.status === "ready" ? parseFolders(current.values.widgetFolders) : widgetFolders;
+    return refreshWidget(widget, { force, trustedFolders: trusted });
+  });
   server.handle(sketchFontRpc, async () => ({ dataUrl: await sketchFontDataUrl() }));
 
   server.handle(webImageRpc, ({ url }) => web.image(url));

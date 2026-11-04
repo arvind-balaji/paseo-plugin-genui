@@ -293,6 +293,57 @@ export function loadAgentAudio(
   );
 }
 
+const WIDGET_REFUSAL =
+  "widgets can only load files in their own folder, /tmp, or the extra folders in Generative UI settings";
+
+/** Reads `requested` relative to `root` (a widget's folder), or an absolute path in /tmp or an extra folder. */
+async function readRootedFile(root: string, requested: string, maxBytes: number): Promise<FileContent> {
+  const target = path.resolve(root, expandHome(requested));
+  let attempts: Attempt[] = contains(root, target) ? [{ root, target }] : [];
+  if (attempts.length === 0) attempts = tempAttempts(target);
+  if (attempts.length === 0) {
+    attempts = extraRoots.flatMap((extra) => (contains(extra, target) ? [{ root: extra, target }] : [])).slice(0, 1);
+  }
+  if (attempts.length === 0) return { ok: false, error: WIDGET_REFUSAL };
+
+  let firstFailure: FileContent | undefined;
+  for (const attempt of attempts) {
+    const result = await readConfinedFile(attempt.root, attempt.target, requested, maxBytes, WIDGET_REFUSAL);
+    if (result.ok) return result;
+    if (result.outsideRoot) return { ok: false, error: WIDGET_REFUSAL };
+    firstFailure ??= { ok: false, error: result.error };
+  }
+  return firstFailure!;
+}
+
+export function loadRootedFile(
+  root: string,
+  requested: string,
+  { raw = false }: { raw?: boolean } = {},
+): Promise<LoadedData> {
+  return loadWith((target, maxBytes) => readRootedFile(root, target, maxBytes), requested, raw);
+}
+
+export function loadRootedImage(root: string, requested: string): Promise<LoadedImage> {
+  return loadMediaWith(
+    (target, maxBytes) => readRootedFile(root, target, maxBytes),
+    requested,
+    IMAGE_TYPES,
+    MAX_IMAGE_BYTES,
+    "images",
+  );
+}
+
+export function loadRootedAudio(root: string, requested: string): Promise<LoadedImage> {
+  return loadMediaWith(
+    (target, maxBytes) => readRootedFile(root, target, maxBytes),
+    requested,
+    AUDIO_TYPES,
+    MAX_AUDIO_BYTES,
+    "recordings",
+  );
+}
+
 let cachedPluginRoot: string | null = null;
 
 function resolvePluginRoot(): string {

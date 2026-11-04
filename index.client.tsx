@@ -19,6 +19,7 @@ import {
 import { TimelineBlockItem, TimelineTextItem } from "./client/live-ui";
 import { registerQueuePills } from "./client/queue-pill";
 import { GenUiSettingsScreen } from "./client/settings";
+import { WidgetPanel } from "./client/widget-panel";
 
 export default function contribute(client: PluginClientContext) {
   const playAudio = async (dataUrl: string) => {
@@ -76,6 +77,13 @@ export default function contribute(client: PluginClientContext) {
     Component: (props) => <GalleryWorkspacePanel {...props} playAudio={playAudio} />,
   });
 
+  client.addFilePanel({
+    id: "widget",
+    title: "Widget",
+    icon: "LayoutDashboard",
+    files: { extensions: ["ui"] },
+    Component: (props) => <WidgetPanel {...props} playAudio={playAudio} />,
+  });
   client.addSettingsScreen({
     id: "preferences",
     title: "Generative UI",

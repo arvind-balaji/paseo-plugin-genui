@@ -7,6 +7,7 @@ import { genuiSettings } from "../shared/settings";
 export function GenUiSettingsScreen({ theme }: PluginSurfaceProps) {
   const settings = useSettings(genuiSettings);
   const [folders, setFolders] = React.useState<string | null>(null);
+  const [widgetFolders, setWidgetFolders] = React.useState<string | null>(null);
 
   if (settings.status === "loading") {
     return (
@@ -69,6 +70,26 @@ export function GenUiSettingsScreen({ theme }: PluginSurfaceProps) {
             disabled={folders === null || folders === values.extraFolders}
             onPress={() => {
               if (folders !== null) void save({ ...values, extraFolders: folders }, revision);
+            }}
+          />
+        </SettingsCard>
+      </SettingsSection>
+
+      <SettingsSection title="Widgets">
+        <SettingsCard>
+          <SettingsInput
+            label="Widget folders"
+            hint="Comma-separated folders whose widget files (*.ui) may run the script in their @refresh line. Scripts run on the Paseo host as the daemon's user, so list only folders you trust."
+            initialValue={values.widgetFolders}
+            placeholder="~/widgets"
+            onChangeText={setWidgetFolders}
+          />
+          <SettingsAction
+            label="Apply widget folder changes"
+            actionLabel="Save"
+            disabled={widgetFolders === null || widgetFolders === values.widgetFolders}
+            onPress={() => {
+              if (widgetFolders !== null) void save({ ...values, widgetFolders }, revision);
             }}
           />
         </SettingsCard>

@@ -126,6 +126,46 @@ export const galleryAudioRpc = defineRpc({
   output: loadedImageSchema,
 });
 
+/** A widget file (`*.ui`) reads relative to its own folder; `widget` is its absolute path. */
+const widgetInput = z.object({ widget: filePath, path: filePath });
+
+export const widgetDataRpc = defineRpc({
+  name: "genui.widget_data",
+  input: widgetInput.extend({ raw: z.boolean().optional() }),
+  output: loadedDataSchema,
+});
+
+export const widgetImageRpc = defineRpc({
+  name: "genui.widget_image",
+  input: widgetInput,
+  output: loadedImageSchema,
+});
+
+export const widgetAudioRpc = defineRpc({
+  name: "genui.widget_audio",
+  input: widgetInput,
+  output: loadedImageSchema,
+});
+
+export const widgetRunStateSchema = z.object({
+  /** Whether this call ran the script, rather than reporting the last run. */
+  ran: z.boolean(),
+  ok: z.boolean(),
+  /** ISO time the last run finished, or null before the first run. */
+  at: z.string().nullable(),
+  error: z.string().optional(),
+  /** The last lines the script printed, stdout then stderr. */
+  output: z.string().optional(),
+});
+export type WidgetRunState = z.infer<typeof widgetRunStateSchema>;
+
+/** Runs the widget's `@refresh ... run` script when it is due, or now with `force`. */
+export const widgetRefreshRpc = defineRpc({
+  name: "genui.widget_refresh",
+  input: z.object({ widget: filePath, force: z.boolean() }),
+  output: widgetRunStateSchema,
+});
+
 export const sketchFontRpc = defineRpc({
   name: "genui.sketch_font",
   input: z.object({}),

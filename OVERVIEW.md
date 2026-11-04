@@ -19,6 +19,10 @@ When automatic instructions are enabled, new agents receive the Generative UI co
 - **Sandboxed mini-apps**: `app` blocks run self-contained HTML and JavaScript inside a sandboxed iframe (`sandbox="allow-scripts"`) with a network-blocking Content Security Policy on desktop and web clients.
 - **Settings and web lookups**: Under **Settings -> Plugins -> Generative UI**, you can toggle automatic agent instructions for new sessions and toggle server-side web lookups, and add extra folders (for example `~/dev/scratch`) that file reads may use. When web lookups are on, the daemon fetches photo searches from Wikimedia Commons (`commons.wikimedia.org` / `upload.wikimedia.org`), geocoding from Photon (`photon.komoot.io`), map tiles from OpenStreetMap (`tile.openstreetmap.org`), and HTTPS images through an address-checked proxy that rejects loopback, private, and link-local IP addresses. No cookies, credentials, or conversation text beyond the specific search query or place name are sent. Turning web lookups off disables all external network requests.
 
+## Widgets
+
+A spec saved as a `.ui` file opens as its own tab and is kept, for dashboards and trackers you check on. A first line `@refresh 5m` reloads its data on a schedule while it is open; `@refresh 1h run ./update.sh` first runs a script beside it, but only for widgets in the trusted folders set under Settings -> Plugins -> Generative UI -> Widget folders. Scripts run on the daemon host as the daemon's user, with a 2-minute limit.
+
 ## Limits
 
 File reads outside the agent's workspace, thread storage, `/tmp`, and the extra folders in settings are refused; agents are told to copy other files into thread storage first. Sandboxed `app` blocks require a desktop or browser client; mobile clients display the block's source code.

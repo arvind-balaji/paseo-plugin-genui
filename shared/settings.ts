@@ -9,6 +9,8 @@ export const genuiSettings = defineSettings({
     autoInstructions: z.boolean().default(true),
     webLookups: z.boolean().default(true),
     extraFolders: z.string().default(""),
+    /** Folders whose widget files (`*.ui`) may run their `@refresh ... run` script. */
+    widgetFolders: z.string().default(""),
   }),
 });
 

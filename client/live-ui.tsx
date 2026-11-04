@@ -474,7 +474,7 @@ export function SpecBlockView({
     );
   }
 
-  const agentId = scope === "gallery" ? null : scope.agentId;
+  const agentId = scope !== "gallery" && "agentId" in scope ? scope.agentId : null;
   return (
     <LiveUi
       program={shown.program}
@@ -489,7 +489,7 @@ export function SpecBlockView({
       loadAudio={loadAudio}
       playAudio={playAudio}
       agentId={agentId}
-      blockKey={scope === "gallery" ? null : stateKey}
+      blockKey={scope !== "gallery" && "agentId" in scope ? stateKey : null}
       theme={theme}
       compact={compact}
       platform={platform}

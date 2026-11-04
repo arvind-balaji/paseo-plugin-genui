@@ -51,6 +51,19 @@ Paseo renders a card with a plan switch, a seat slider, and a live total. Moving
 
 Cards can collect a reply before anything is sent. A button with `Queue(text)` adds its text to your reply instead of sending it. `comments: true` adds a Comment action to each item of a Plan, Steps, List, Table, Findings, Decision or OptionCards, and `editable: true` lets you rewrite an item's text. `Other()` opens a box for anything the agent did not offer. A pill in the composer shows what is queued; the next Send, or Send now in the pill, sends it all as one message.
 
+## Widgets you keep
+
+Save a spec to a `<name>.ui` file and it opens as its own tab: a dashboard, tracker or status board you check on, instead of a card that scrolls away in a chat. The tab re-renders when the file changes. `Load`, `Image` and `Snippet` read relative to the widget's folder, `/tmp`, or the extra folders in settings. `Send()` buttons go to the most recently active agent in the workspace.
+
+A widget can refresh itself with a first line:
+
+```
+@refresh 5m                     reload its data every 5 minutes while open
+@refresh 1h run ./update.sh     run ./update.sh first, then reload
+```
+
+The script must be an executable file in the widget's folder (with a `#!` line). It runs on the Paseo host as the daemon's user, in the widget's folder, with a 2-minute limit, at most once per interval however many tabs are open, and only for widgets in the folders listed under **Settings -> Plugins -> Generative UI -> Widget folders**. Refresh runs while a widget is open; opening one that is overdue refreshes it at once. The **Refresh** button runs it immediately. A failed run shows its error and last output above the widget, which keeps the last good data.
+
 ## Components (88 across 10 groups)
 
 | Group | Components |

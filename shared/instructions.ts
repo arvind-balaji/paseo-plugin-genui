@@ -136,6 +136,12 @@ export const AGENT_INSTRUCTIONS_WEB_OFF = AGENT_INSTRUCTIONS.replace(MAP_EXAMPLE
 
 export const GENUI_MARKER = "[paseo-plugin-genui]";
 
+export const WIDGET_INSTRUCTIONS = `# Widgets: UI the user keeps
+When the user wants something to keep and check on (a dashboard, tracker, status board), write the spec to a \`<name>.ui\` file instead of a reply; Paseo opens it as its own tab and re-reads it when it changes. Same language, no fence. Load, Image and Snippet paths are relative to the widget's folder (or /tmp). Optional first lines:
+@refresh 5m                 reloads the widget's data every 5 minutes while open
+@refresh 1h run ./update.sh  first runs ./update.sh (beside the widget, executable, with a #! line) to rewrite its data files
+Keep data in files the script writes (JSON/CSV) and the spec Loads, so the widget updates without you. Scripts run only for widgets in the folders listed under Settings → Plugins → Generative UI → Widget folders; say so if the widget's folder is not there. Send() buttons in a widget go to the newest agent in its workspace.`;
+
 export function buildFullInstructions(webLookups: boolean, extraFolders: readonly string[] = []): string {
   return [
     GENUI_MARKER,
@@ -144,5 +150,6 @@ export function buildFullInstructions(webLookups: boolean, extraFolders: readonl
     UI_REFERENCE_MORE,
     CODE_WORK_INSTRUCTIONS,
     webLookups ? AGENT_INSTRUCTIONS : AGENT_INSTRUCTIONS_WEB_OFF,
+    WIDGET_INSTRUCTIONS,
   ].join("\n\n");
 }
